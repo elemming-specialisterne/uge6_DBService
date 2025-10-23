@@ -1,0 +1,17 @@
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'web_anon') THEN
+    CREATE ROLE web_anon NOLOGIN;
+  END IF;
+END$$;
+
+-- read-only access for PostgREST anon
+GRANT USAGE ON SCHEMA public TO web_anon;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO web_anon;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO web_anon;
+
+-- future tables/sequences
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT ON TABLES TO web_anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO web_anon;
