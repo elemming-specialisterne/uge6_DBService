@@ -2,13 +2,14 @@
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: shop
       POSTGRES_USER: app
       POSTGRES_PASSWORD: secret
     ports: ["5432:5432"]
     volumes:
-      - ../pgdata:/var/lib/postgresql/data
+      - dbdata:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL","pg_isready -U app -d shop || exit 1"]
@@ -18,6 +19,7 @@ services:
 
   postgrest:
     image: postgrest/postgrest:latest
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -26,3 +28,6 @@ services:
       PGRST_DB_URI: postgres://app:secret@db:5432/shop
       PGRST_DB_SCHEMAS: public
       PGRST_DB_ANON_ROLE: web_anon
+
+volumes:
+  dbdata:
