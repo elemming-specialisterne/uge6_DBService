@@ -1,17 +1,28 @@
-# uge6_DBService
+# 🧠 uge6_DBService
 
-Postgres + PostgREST stack with auto schema + seed on first boot.
+Postgres + PostgREST stack with JWT auth and **RBAC (Role-Based Access Control)**.
 
 ## Stack
-- Postgres 16
-- PostgREST
+
+- PostgreSQL 16
+- PostgREST 13
 - Docker Compose
 
-## Prereqs
-- Docker Desktop
-- Git
+## Roles and Access (RBAC)
 
-## Project layout
+| Role                 | Description             | Access                                  |
+| -------------------- | ----------------------- | --------------------------------------- |
+| **guest (web_anon)** | Unauthenticated         | Read-only on public tables              |
+| **user (app_user)**  | Logged-in regular user  | CRUD on `products`, read-only elsewhere |
+| **admin**            | Logged-in administrator | Full CRUD on all tables and sequences   |
+
+Authentication is handled by `auth.login`, returning a JWT with 1-hour expiry.  
+Authorization (RBAC) is enforced by SQL grants and row-level security (RLS) rules in `07_acl.sql`.
+
+---
+
+## 📁 Project layout
+
 ```text
 db/
   docker-compose.yml
@@ -21,114 +32,118 @@ db/
     02_seed.sql
     03_seed_users.csv
     04_seed_products.csv
-    099_grants.sql
+    05_auth.sql
+    06_public_login_wrapper.sql
+    07_acl.sql
 ```
 
-## Quick start
+---
+
+## ⚙️ Quick start
+
 ```bash
 cd db
 docker compose up -d
 ```
 
-### Wait until Postgres is ready
-```bash
-docker compose logs --tail=100 db
-# look for: "database system is ready to accept connections"
+Wait until:
+
+```
+database system is ready to accept connections
 ```
 
-## Verify
+Then visit:
 
-### SQL
-```bash
-docker exec -it db-db-1 psql -U app -d shop -c "TABLE role;"
 ```
-```bash
-docker exec -it db-db-1 psql -U app -d shop -c "SELECT COUNT(*) FROM product;"
+http://localhost:3000/products?limit=5
 ```
 
+---
 
-### HTTP (PostgREST)
-- GET `http://localhost:3000/product?limit=5` with header `Accept: application/json`
+## 🧪 Verify
 
-## How it works
-- Files in `init/` run **once** on first boot (when the DB volume is empty).
-- `099_grants.sql` creates `web_anon` and grants read-only on `public`.
+### Guest (no token)
 
-## Common tasks
-
-### Restart without losing data
 ```bash
-docker compose down
-docker compose up -d
+curl http://localhost:3000/products?limit=1       # 200
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"name":"Nope","price":1}' http://localhost:3000/products  # 401
 ```
 
-### Full reset (rerun all init scripts)
+### User (RBAC → app_user)
+
 ```bash
-docker compose down
-docker volume rm db_dbdata     # find the exact name via: docker volume ls
-docker compose up -d
+TOKEN=$(curl -s -X POST -H "Content-Type: application/json" \
+  -d '{"p_username":"alice","p_password":"1234"}' \
+  http://localhost:3000/rpc/login | sed -E 's/.*"token":"([^"]+)".*/\1/')
+
+# Allowed (RBAC rule grants CRUD on products)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/products?limit=1
+
+# Blocked (RBAC denies modifying orders)
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"userid":1,"price":100}' http://localhost:3000/orders
 ```
 
-### Reseed users + products (no wipe beyond what 02_seed.sql does)
-PowerShell:
-```powershell
-# reseed users + products (wipes and loads per 02_seed.sql)
-docker exec -i db-db-1 psql -U app -d shop -v ON_ERROR_STOP=1 `
+### Admin (RBAC → admin)
+
+```bash
+ADM=$(curl -s -X POST -H "Content-Type: application/json" \
+  -d '{"p_username":"bob","p_password":"1234"}' \
+  http://localhost:3000/rpc/login | sed -E 's/.*"token":"([^"]+)".*/\1/')
+
+# Allowed: full CRUD
+curl -H "Authorization: Bearer $ADM" http://localhost:3000/orders
+curl -X POST -H "Authorization: Bearer $ADM" -H "Content-Type: application/json" \
+  -d '{"userid":1,"price":99.99}' http://localhost:3000/orders
+```
+
+---
+
+## 🔁 Reset / reseed
+
+### Soft reseed
+
+```bash
+docker exec -i db-db-1 psql -U app -d shop_db -v ON_ERROR_STOP=1 \
   -f /docker-entrypoint-initdb.d/02_seed.sql
-
-# quick sanity
-docker exec -it db-db-1 psql -U app -d shop -c 'SELECT count(*) AS users FROM "user";'
-docker exec -it db-db-1 psql -U app -d shop -c 'SELECT count(*) AS products FROM product;'
 ```
 
-Bash:
+### Full reset
+
 ```bash
-docker exec -i db-db-1 psql -U app -d shop -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/02_seed.sql
-docker exec -it db-db-1 psql -U app -d shop -c 'SELECT count(*) AS users FROM "user";'
-docker exec -it db-db-1 psql -U app -d shop -c 'SELECT count(*) AS products FROM product;'
+docker compose down -v
+docker compose up -d
 ```
 
-### List tables and privileges
-```bash
-docker exec -it db-db-1 psql -U app -d shop -c "\dt public.*"
-docker exec -it db-db-1 psql -U app -d shop -c "\dp public.*"
-```
+---
 
-## Postman quick recipes
-- Read rows: `GET /product?limit=5` with `Accept: application/json`
-- `http://localhost:3000/product`
-- Select columns: `GET /product?select=productid,name,price&limit=5`
-- `http://localhost:3000/product?limit=5`
-- Sort: append `&order=productid.desc`
-- Filter: append `&price=gt.100`
+## 🧰 Common diagnostics
 
-- Cheaper than 20
-`curl http://localhost:3000/product?price=lt.20`
+| Symptom                   | Fix                                |
+| ------------------------- | ---------------------------------- |
+| `PGRST002 schema cache`   | Schema missing → run `05_auth.sql` |
+| `401 Unauthorized`        | Missing/invalid JWT                |
+| `42501 permission denied` | Check RBAC rules in `07_acl.sql`   |
+| `503 Service Unavailable` | DB not ready                       |
+| Need new anon role        | Re-run `07_acl.sql`                |
 
-Between 10 and 30
-`http://localhost:3000/product?price=gte.10&price=lte.30`
+---
 
-Exactly 19.99
-`http://localhost:3000/product?price=eq.19.99`
+## 🧩 How RBAC works
 
-Name contains “dog” and price ≤ 25
-`http://localhost:3000/product?name=ilike.*dog*&price=lte.25`
+- `auth.login` issues JWTs embedding `role` claim (`app_user`, `admin`).
+- PostgREST uses the claim to **switch SQL role** at runtime.
+- `07_acl.sql` defines which role can read/write each table.
+- Guests (`web_anon`) default to read-only.
+- Users (`app_user`) can CRUD products only.
+- Admins have global privileges including orders, users, and products.
 
-Sort by price asc/desc
-`http://localhost:3000/product?order=price.asc`
-`http://localhost:3000/product?order=price.desc`
+---
 
-Top 5 cheapest
-`http://localhost:3000/product?order=price.asc&limit=5`
+## ✅ Tested end-to-end (RBAC)
 
-
-## Troubleshooting
-- 404 on table: wrong name or cache stale → `docker compose restart postgrest`.
-- 401: `web_anon` missing → rerun `099_grants.sql`.
-- 503/connection refused: DB not ready → check `docker compose logs db`.
-- Seed failed: fix CSV headers, then run `02_seed.sql` or do a full reset.
-
-## Notes
-- Data is stored in a Docker **named volume** (e.g., `db_dbdata`), not in a local `pgdata` folder.
-- Keep CSV headers aligned with column lists in `02_seed.sql`.
-- For public exposure, prefer granting `web_anon` only on views.
+✔ Guest: read only  
+✔ User: CRUD on products only  
+✔ Admin: full access  
+✔ JWT auth + RLS + RBAC all verified via `/rpc/login`
