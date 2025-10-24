@@ -1,32 +1,41 @@
-CREATE TABLE role (
-  name text PRIMARY KEY,
-  admin boolean NOT NULL DEFAULT false
+-- 1) Needed for crypt() / gen_salt()
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- 2) Roles
+CREATE TABLE IF NOT EXISTS role (
+  name TEXT PRIMARY KEY,
+  admin BOOLEAN NOT NULL DEFAULT FALSE
 );
 
-CREATE TABLE "user" (
-  userid bigserial PRIMARY KEY,
-  username text NOT NULL UNIQUE,
-  name text,
-  email text UNIQUE,
-  role_name text NOT NULL REFERENCES role(name)
+-- 3) Users  (avoid reserved word "user")
+CREATE TABLE IF NOT EXISTS users (
+  userid BIGSERIAL PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  name TEXT,
+  email TEXT UNIQUE,
+  password_hash TEXT NOT NULL,
+  role_name TEXT NOT NULL REFERENCES role(name)
 );
 
-CREATE TABLE product (
-  productid bigserial PRIMARY KEY,
-  name text NOT NULL UNIQUE,
-  description text,
-  price numeric(10,2) NOT NULL CHECK (price >= 0)
+-- 4) Products
+CREATE TABLE IF NOT EXISTS products (
+  productid BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  price NUMERIC(10,2) NOT NULL CHECK (price >= 0)
 );
 
-CREATE TABLE "order" (
-  orderid bigserial PRIMARY KEY,
-  userid bigint NOT NULL REFERENCES "user"(userid),
-  price numeric(12,2) NOT NULL DEFAULT 0
+-- 5) Orders
+CREATE TABLE IF NOT EXISTS orders (
+  orderid BIGSERIAL PRIMARY KEY,
+  userid BIGINT NOT NULL REFERENCES users(userid),
+  price NUMERIC(12,2) NOT NULL DEFAULT 0
 );
 
-CREATE TABLE productorder (
-  orderid bigint NOT NULL REFERENCES "order"(orderid) ON DELETE CASCADE,
-  productid bigint NOT NULL REFERENCES product(productid),
-  amount int NOT NULL CHECK (amount > 0),
+-- 6) Order items
+CREATE TABLE IF NOT EXISTS product_order (
+  orderid BIGINT NOT NULL REFERENCES orders(orderid) ON DELETE CASCADE,
+  productid BIGINT NOT NULL REFERENCES products(productid),
+  amount INT NOT NULL CHECK (amount > 0),
   PRIMARY KEY (orderid, productid)
 );

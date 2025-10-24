@@ -1,2 +1,4 @@
-INSERT INTO role(name, admin) VALUES ('User',false),('Admin',true)
-ON CONFLICT DO NOTHING;
+INSERT INTO role(name, admin) VALUES
+  ('admin', TRUE),
+  ('customer', FALSE)
+ON CONFLICT (name) DO NOTHING;
