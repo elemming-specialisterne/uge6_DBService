@@ -7,6 +7,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
     ports: ["5432:5432"]
     volumes:
       - dbdata:/var/lib/postgresql/data
@@ -46,9 +47,6 @@ services:
       PGRST_DB_ROLE_CLAIM_KEY: .role
       PGRST_JWT_SECRET: ${JWT_SECRET}
       PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS}
-
-
-
 
 volumes:
   dbdata:

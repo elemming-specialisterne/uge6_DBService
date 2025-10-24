@@ -39,3 +39,13 @@ CREATE TABLE IF NOT EXISTS product_order (
   amount INT NOT NULL CHECK (amount > 0),
   PRIMARY KEY (orderid, productid)
 );
+
+
+
+-- SECURITY BASED ON ROLE
+-- for table "products"
+-- 00_schema.sql
+-- keep DDL only; no roles, no GRANTs, no POLICY bodies
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_order ENABLE ROW LEVEL SECURITY;
