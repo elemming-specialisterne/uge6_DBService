@@ -96,7 +96,9 @@ docker exec -it db-db-1 psql -U app -d shop -c "\dp public.*"
 
 ## Postman quick recipes
 - Read rows: `GET /product?limit=5` with `Accept: application/json`
+- `http://localhost:3000/product`
 - Select columns: `GET /product?select=productid,name,price&limit=5`
+- `http://localhost:3000/product?limit=5`
 - Sort: append `&order=productid.desc`
 - Filter: append `&price=gt.100`
 
