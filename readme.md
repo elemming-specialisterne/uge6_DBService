@@ -102,6 +102,26 @@ docker exec -it db-db-1 psql -U app -d shop -c "\dp public.*"
 - Sort: append `&order=productid.desc`
 - Filter: append `&price=gt.100`
 
+- Cheaper than 20
+`curl http://localhost:3000/product?price=lt.20`
+
+Between 10 and 30
+`http://localhost:3000/product?price=gte.10&price=lte.30`
+
+Exactly 19.99
+`http://localhost:3000/product?price=eq.19.99`
+
+Name contains “dog” and price ≤ 25
+`http://localhost:3000/product?name=ilike.*dog*&price=lte.25`
+
+Sort by price asc/desc
+`http://localhost:3000/product?order=price.asc`
+`http://localhost:3000/product?order=price.desc`
+
+Top 5 cheapest
+`http://localhost:3000/product?order=price.asc&limit=5`
+
+
 ## Troubleshooting
 - 404 on table: wrong name or cache stale → `docker compose restart postgrest`.
 - 401: `web_anon` missing → rerun `099_grants.sql`.
