@@ -10,6 +10,25 @@ END $$;
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO web_anon, app_user, admin;
 
+-- users
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO admin;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS p_users_admin_all ON public.users;
+CREATE POLICY p_users_admin_all ON public.users
+  FOR ALL TO admin USING (true) WITH CHECK (true);
+
+GRANT SELECT ON public.users TO app_user;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS p_users_self_select ON public.users;
+CREATE POLICY p_users_self_select ON public.users
+  FOR SELECT TO app_user
+  USING (
+    userid = COALESCE(
+      (current_setting('request.jwt.claims', true))::jsonb->>'user_id','-1'
+    )::bigint
+  );
+
+
 -- products
 REVOKE ALL ON TABLE public.products FROM PUBLIC;
 GRANT SELECT            ON TABLE public.products TO web_anon;
