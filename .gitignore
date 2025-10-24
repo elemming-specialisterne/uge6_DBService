@@ -1,3 +1,6 @@
 # Postgres persistent data
 pgdata/
 pgdata/**
+
+
+.env

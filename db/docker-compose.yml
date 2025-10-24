@@ -1,32 +1,54 @@
+
 services:
   db:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: shop
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports: ["5432:5432"]
     volumes:
       - dbdata:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U app -d shop || exit 1"]
+      test: ["CMD-SHELL","pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} || exit 1"]
       interval: 3s
       timeout: 2s
       retries: 20
 
+  seed:
+    image: postgres:16
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      JWT_SECRET: ${JWT_SECRET}
+    entrypoint: >
+      sh -c "
+        psql -h db -U ${POSTGRES_USER} -d ${POSTGRES_DB} -v ON_ERROR_STOP=1
+          -c 'CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS pgjwt;'
+        && psql -h db -U ${POSTGRES_USER} -d ${POSTGRES_DB} -v ON_ERROR_STOP=1
+          -c \"ALTER DATABASE ${POSTGRES_DB} SET app.jwt_secret='${JWT_SECRET}';\"
+      "
+    restart: "no"
+
   postgrest:
     image: postgrest/postgrest:latest
-    restart: unless-stopped
     depends_on:
-      db:
-        condition: service_healthy
+      db: { condition: service_healthy }
     ports: ["3000:3000"]
     environment:
-      PGRST_DB_URI: postgres://app:secret@db:5432/shop
-      PGRST_DB_SCHEMAS: public
+      PGRST_DB_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       PGRST_DB_ANON_ROLE: web_anon
+      PGRST_DB_ROLE_CLAIM_KEY: .role
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS}
+
+
+
 
 volumes:
   dbdata:

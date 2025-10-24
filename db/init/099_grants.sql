@@ -7,6 +7,9 @@ END$$;
 
 GRANT web_anon TO app;
 
+GRANT USAGE ON SCHEMA auth TO web_anon;
+GRANT EXECUTE ON FUNCTION auth.login(text,text) TO web_anon;
+
 GRANT USAGE ON SCHEMA public TO web_anon;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO web_anon;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO web_anon;
