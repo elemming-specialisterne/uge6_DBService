@@ -56,7 +56,8 @@ DROP POLICY IF EXISTS p_po_write ON public.product_order;
 CREATE POLICY p_po_write ON public.product_order
   FOR ALL TO admin USING (true) WITH CHECK (true);
 
--- sequences (admin only)
+-- sequences
+GRANT USAGE, SELECT ON SEQUENCE public.products_productid_seq TO app_user;  -- needed for inserts into products
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO admin;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC;
 

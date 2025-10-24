@@ -1,3 +1,6 @@
+-- ./db/init/01_seed_roles.sql
+-- Create database roles used by PostgREST tokens. Grants are in 07_acl.sql.
+
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='web_anon') THEN
@@ -10,14 +13,3 @@ BEGIN
     CREATE ROLE admin NOINHERIT;
   END IF;
 END $$;
-
--- grants
-GRANT USAGE ON SCHEMA public TO web_anon, app_user, admin;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO web_anon;             -- read-only anon
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO web_anon;
-
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_user;
-GRANT INSERT, UPDATE, DELETE ON orders, product_order TO app_user;
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO admin;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO admin;
