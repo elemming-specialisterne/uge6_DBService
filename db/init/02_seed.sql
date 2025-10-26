@@ -1,79 +1,63 @@
--- 02_seed.sql
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
+-- ./db/init/02_seed.sql  (CSV-based orders + lines)
 BEGIN;
 SET LOCAL client_min_messages = WARNING;
 
--- names must match 00_schema.sql
-TRUNCATE TABLE
-  product_order,
-  orders,
-  products,
-  users,
-  role
-RESTART IDENTITY CASCADE;
+-- Only reset orders
+TRUNCATE TABLE public.product_order, public.orders RESTART IDENTITY CASCADE;
 
--- roles (safe if also seeded elsewhere)
-INSERT INTO role(name, admin) VALUES
-  ('User', false), ('Admin', true)
-ON CONFLICT (name) DO NOTHING;
-
--- users: stage -> hash -> insert
-CREATE TEMP TABLE users_stage(
-  username text,
-  name text,
-  email text,
-  password_plain text,
-  role_name text
+-- === ORDERS ===
+-- CSV path: /docker-entrypoint-initdb.d/05_seed_orders.csv
+-- Columns: orderid,userid,created_at
+CREATE TEMP TABLE st_orders(
+  orderid    bigint,
+  userid     bigint,
+  created_at timestamptz
 ) ON COMMIT DROP;
 
-COPY users_stage(username,name,email,password_plain,role_name)
-FROM '/docker-entrypoint-initdb.d/03_seed_users.csv'
+COPY st_orders(orderid,userid,created_at)
+FROM '/docker-entrypoint-initdb.d/05_seed_orders.csv'
 WITH (FORMAT csv, HEADER true, NULL '');
 
-INSERT INTO users(username,name,email,password_hash,role_name)
-SELECT
-  trim(s.username),
-  NULLIF(trim(s.name),''),
-  NULLIF(trim(s.email),''),
-  crypt(s.password_plain, gen_salt('bf',12)),
-  s.role_name
-FROM users_stage s
-WHERE trim(coalesce(s.username,'')) <> ''
-  AND trim(coalesce(s.password_plain,'')) <> '';
+-- Insert orders only if user exists. Keep explicit orderid if provided.
+INSERT INTO public.orders(orderid, userid, created_at)
+SELECT o.orderid, o.userid, COALESCE(o.created_at, now())
+FROM st_orders o
+JOIN public.users u ON u.userid = o.userid
+ON CONFLICT (orderid) DO NOTHING;
 
--- unique indexes (new table names)
-CREATE UNIQUE INDEX IF NOT EXISTS ux_users_username ON users(username);
-CREATE UNIQUE INDEX IF NOT EXISTS ux_products_name ON products(name);
+-- === ORDER LINES ===
+-- CSV path: /docker-entrypoint-initdb.d/06_seed_order_lines.csv
+-- Columns: orderid,productid,qty,unit_price
+CREATE TEMP TABLE st_lines(
+  orderid    bigint,
+  productid  bigint,
+  qty        integer,
+  unit_price numeric(10,2)
+) ON COMMIT DROP;
 
--- products
-CREATE TEMP TABLE st_product_raw(name text, description text, price text) ON COMMIT DROP;
-
-COPY st_product_raw(name,description,price)
-FROM '/docker-entrypoint-initdb.d/04_seed_products.csv'
+COPY st_lines(orderid,productid,qty,unit_price)
+FROM '/docker-entrypoint-initdb.d/06_seed_order_lines.csv'
 WITH (FORMAT csv, HEADER true, NULL '');
 
-WITH cleaned AS (
-  SELECT row_number() OVER () AS line_no,
-         trim(name) AS name,
-         NULLIF(trim(description),'') AS description,
-         CASE WHEN trim(price) ~ '^[0-9]+(\.[0-9]{1,2})?$'
-              THEN trim(price)::numeric(10,2) ELSE NULL END AS price
-  FROM st_product_raw
-  WHERE trim(coalesce(name,'')) <> ''
-),
-dedup AS (
-  SELECT name, description, price
+-- Only insert lines where both order and product exist
+INSERT INTO public.product_order(orderid,productid,qty,unit_price)
+SELECT l.orderid, l.productid, l.qty, l.unit_price
+FROM st_lines l
+JOIN public.orders   o ON o.orderid   = l.orderid
+JOIN public.products p ON p.productid = l.productid
+ON CONFLICT (orderid, productid) DO NOTHING;
+
+-- Recompute totals for all touched orders
+DO $$
+BEGIN
+  UPDATE public.orders o
+  SET price = COALESCE(s.sum_total, 0)
   FROM (
-    SELECT name, description, price,
-           row_number() OVER (PARTITION BY lower(name) ORDER BY line_no DESC) AS rn
-    FROM cleaned
-  ) x
-  WHERE rn = 1
-)
-INSERT INTO products(name,description,price)
-SELECT name, description, price
-FROM dedup
-WHERE price IS NOT NULL;
+    SELECT orderid, SUM(qty * unit_price)::numeric(12,2) AS sum_total
+    FROM public.product_order
+    GROUP BY orderid
+  ) s
+  WHERE o.orderid = s.orderid;
+END$$;
 
 COMMIT;
