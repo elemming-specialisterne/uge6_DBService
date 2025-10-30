@@ -1,0 +1,67 @@
+name: DBService CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shop_db
+        options: >-
+          --health-cmd "pg_isready"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install SQL linter
+        run: pip install sqlfluff
+
+      - name: Lint SQL scripts
+        run: sqlfluff lint ./db/init
+
+      - name: Run DB migrations & seeds
+        run: |
+          psql -h localhost -U app -d shop_db -f ./db/init/00_schema.sql
+          psql -h localhost -U app -d shop_db -f ./db/init/01_seed_roles.sql
+          psql -h localhost -U app -d shop_db -f ./db/init/02_seed.sql
+          psql -h localhost -U app -d shop_db -f ./db/init/03_seed_users.csv
+          psql -h localhost -U app -d shop_db -f ./db/init/04_seed_products.csv
+          psql -h localhost -U app -d shop_db -f ./db/init/05_auth.sql
+          psql -h localhost -U app -d shop_db -f ./db/init/06_public_login_wrapper.sql
+          psql -h localhost -U app -d shop_db -f ./db/init/07_acl.sql
+
+      - name: Verify RBAC (optional)
+        run: |
+          # Test JWT login via PostgREST
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"p_username":"alice","p_password":"1234"}' \
+            http://localhost:3000/rpc/login
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy migration scripts
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+        run: |
+          PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f ./db/init/02_seed.sql
+          PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f ./db/init/04_seed_products.csv
