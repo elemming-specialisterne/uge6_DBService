@@ -13,12 +13,14 @@ services:
     ports: ["5432:5432"]
     volumes:
       - dbdata:/var/lib/postgresql/data
-      - ./init:/docker-entrypoint-initdb.d:ro
+      - ./uge6_DBService/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL","pg_isready -U app -d appdb || exit 1"]
       interval: 3s
       timeout: 2s
       retries: 20
+    networks:
+      - app-network
 
   postgrest:
     image: postgrest/postgrest:latest
@@ -31,6 +33,12 @@ services:
       PGRST_DB_SCHEMAS: public
       PGRST_DB_ROLE_CLAIM_KEY: .role
       PGRST_JWT_SECRET: superlong-32byte-min-secret-change-me
+    networks:
+      - app-network
 
 volumes:
   dbdata:
+
+networks:
+  app-network:
+    driver: bridge
