@@ -1,0 +1,10 @@
+external_ref,product_name,qty,unit_price
+O-1001,Widget,2,19.99
+O-1001,Cable,1,5.00
+O-1002,Mouse,1,14.50
+O-1002,Keyboard,1,59.00
+O-1003,Monitor,1,129.99
+O-1003,HDMI Cable,2,6.50
+O-1004,SSD,1,49.99
+O-1004,USB Hub,1,17.95
+O-1004,Headset,1,29.90

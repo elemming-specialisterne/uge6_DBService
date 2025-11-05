@@ -1,0 +1,19 @@
+/* ============================================================================
+Minimal grants for PostgREST startup:
+- web_anon can read products
+- base grants for app_user and app_admin; RLS added in 04_*
+============================================================================ */
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='web_anon') THEN
+    CREATE ROLE web_anon NOLOGIN;
+  END IF;
+END $$;
+
+GRANT USAGE ON SCHEMA public TO web_anon;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO web_anon;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO web_anon;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO web_anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO web_anon;
